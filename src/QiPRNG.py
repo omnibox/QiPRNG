@@ -38,8 +38,8 @@ def find_principal_eig(A):
     
     return np.conjugate(x).dot(A.dot(x)), x
 
-# Quantum-inspired PRNG
-def QiPRNG(v0, alpha, beta, verbosity = 0):
+# Quantum-inspired PRNG supporting Hamiltonians that have been tridiagonalized
+def QiPRNG_tridiag(v0, alpha, beta, M, verbosity = 0):
     # the dimension of the walk
     N = len(alpha)
     
@@ -96,8 +96,8 @@ def QiPRNG(v0, alpha, beta, verbosity = 0):
         current_state = W.dot(current_state)
     
     # M is the basis we'll be measuring in
-    # if we used a change of basis X it would go here
-    M = T.transpose().conjugate(True)
+    # we push it to the { |psi_j> } space here
+    M = M.dot(T.transpose().conjugate(True))
     
     # the core loop: evolving the state and yielding the probabilities
     while True:
@@ -117,18 +117,67 @@ def QiPRNG(v0, alpha, beta, verbosity = 0):
             for k in range(len(b) // 2):
                 yield b[k]
 
-
+# Quantum-inspired PRNG supporting diagonal Hamiltonians
+def QiPRNG_diag(v0, eigs, M, verbosity = 0):
+    # the dimension of the walk
+    N = len(eigs)
+    
+    # the diagonal elements of the walk operator
+    W = np.exp(np.array(eigs, dtype=np.complex128) * (0+1j))
+    
+    # constructing the initial state in the span{ |psi_j> } space
+    initial_state = v0
+    current_state = initial_state
+    
+    # the core loop: evolving the state and yielding the probabilities
+    while True:
+        # evolve to the next timestep
+        current_state = W * current_state
+        
+        # find the amplitudes in the given basis
+        amps = M.dot(current_state)
+        for j in range(N):
+            # get the probabilities
+            prob_j = np.real(amps[j])**2 + np.imag(amps[j])**2
+            
+            # get bits with a little-endian arrangement
+            b = struct.pack("<f", prob_j)
+            
+            # yield the less significant half of the bits
+            for k in range(len(b) // 2):
+                yield b[k]
 
 
 # the initial state
-v0 = np.array([1, 0, 0, 0, 0], dtype=np.complex128)
+v0 = np.array([1, 2, 1, 1, 2], dtype=np.complex128)
+v0 /= np.linalg.norm(v0)
 
 # from Lanczos' algorithm, the diagonals in H
 alpha = [1, 2, 3, 4, 5]
 beta = [1, 9, 8, 7 + 7j]
 
+# Demonstrating the tridiagonal Hamiltonian version
+#count = 0
+#for i in QiPRNG_tridiag(v0, alpha, beta, sp.sparse.eye(len(alpha)).tocsr()):
+#    print(i)
+#    count += 1
+#    if count > 100:
+#        break
+
+state = np.random.get_state()
+# make the code deterministic
+np.random.seed(1337)
+    
+# we need a measurement basis. Normally it should be unitary,
+# but any matrix can be used.
+M = np.random.random((5,5))
+
+# restore the previous state of numpy's PRNG
+np.random.set_state(state)
+
+# demonstrating the diagonalized Hamiltonian version
 count = 0
-for i in QiPRNG(v0, alpha, beta):
+for i in QiPRNG_diag(v0, alpha, M):
     print(i)
     count += 1
     if count > 100:
