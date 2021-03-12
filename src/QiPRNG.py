@@ -20,8 +20,8 @@ def find_principal_eig(A):
     np.random.seed(np.uint32(hash(str(A))))
     
     # select a random normalized starting vector
-    x = np.random.random(A.shape[0]).astype(A.dtype) - 0.5
-    x += np.random.random(A.shape[0]).astype(A.dtype) * (0+1j)
+    x = np.random.random(A.shape[0]).astype(np.complex128) - 0.5
+    x += np.random.random(A.shape[0]).astype(np.complex128) * (0+1j)
     x /= np.linalg.norm(x,2)
     
     # restore the previous state of numpy's PRNG
@@ -63,19 +63,19 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
     A_norm, d = find_principal_eig(A)
     
     # constructing T from equation (6)
-    T = np.array( (N**2, N), dtype=np.complex128)
+    T = np.zeros( (N**2, N), dtype=np.complex128)
     for j in range(N):
         for k in range(max(0, j-1), min(j+2, N)):
             T[j * N + k,j] = np.sqrt((np.conjugate(H[j,k]) * d[k]) / (d[j] * A_norm))
     
     # constructing S from equation (5)
-    S = np.array( (N**2, N**2), dtype=np.complex128)
+    S = np.zeros( (N**2, N**2), dtype=np.complex128)
     for j in range(N):
         for k in range(N):
             S[j * N + k, k * N + j] = 1
     
     # projector onto the |psi_j> space
-    P = T.dot(T.conjugate(True).transpose())
+    P = T.dot(T.conjugate().transpose())
     
     # reflector across the |psi_j> space
     R = 2 * P - np.eye(N**2)
@@ -85,12 +85,14 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
     
     if verbosity >= 1:
         # measuring how close to unitarity we are
-        dev = np.max(np.abs(W.dot(W.transpose().conjugate(True)).todense() - np.eye(25)))
+        dev = np.max(np.abs(W.dot(W.transpose().conjugate()).todense() - np.eye(25)))
         print("Finished constructing walk operator")
         print("Deviation from unitarity: ", dev)
     
     # tridiagonalize W for efficient computation
+    # W_tridiag = XWX^{-1}
     W_tridiag, X = Lanczos(W)
+    # TODO: Currently this function is called, but it is not used.
     
     # constructing the initial state in the span{ |psi_j> } space
     initial_state = T.dot(v0)
@@ -103,7 +105,7 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
     
     # M is the basis we'll be measuring in
     # we push it to the { |psi_j> } space here
-    M = M.dot(T.transpose().conjugate(True))
+    M = M.dot(T.transpose().conjugate())
     
     # the core loop: evolving the state and yielding the probabilities
     while True:
@@ -262,8 +264,15 @@ np.random.seed(1337)
 # but any matrix can be used.
 M = np.random.random((5,5))
 
+# Let's choose a random dense Hamiltonian while we're here
+H = np.random.random((5,5))
+H += H.transpose()
+
 # restore the previous state of numpy's PRNG
 np.random.set_state(state)
+
+
+# Now we generate the binary files
 
 import time
 t = time.time()
@@ -279,4 +288,22 @@ generate_datafile("data_tridiag_1e4.bin", QiPRNG_tridiag(v0, alpha, beta, M), 10
 generate_datafile("data_tridiag_1e5.bin", QiPRNG_tridiag(v0, alpha, beta, M), 100000)
 generate_datafile("data_tridiag_1e6.bin", QiPRNG_tridiag(v0, alpha, beta, M), 1000000)
 print("Time elapsed: %.3f" % (time.time() - t))
+
+t = time.time()
+generate_datafile("data_dense_1e3.bin", QiPRNG_dense(v0, H, M), 1000)
+generate_datafile("data_dense_1e4.bin", QiPRNG_dense(v0, H, M), 10000)
+generate_datafile("data_dense_1e5.bin", QiPRNG_dense(v0, H, M), 100000)
+generate_datafile("data_dense_1e6.bin", QiPRNG_dense(v0, H, M), 1000000)
+print("Time elapsed: %.3f" % (time.time() - t))
+
+
+# And run some tests on one of the sequences generated
+
+import sys
+sys.path.append('../sp800_22_tests_python3')
+from sp800_22_tests import run_tests
+
+results = run_tests("data_dense_1e3.bin")
+
+
 
