@@ -27,7 +27,7 @@ import scipy as sp
 import scipy.sparse
 import scipy.sparse.linalg
 import scipy.stats
-from QiPRNG import QiPRNG_diag, QiPRNG_tridiag, QiPRNG_dense
+from QiPRNG import QiPRNG_exact, QiPRNG_diag, QiPRNG_tridiag, QiPRNG_dense
 
 # The returned values will be a sparse matrix H_tridiag
 # and a dense change of basis matrix X such that XHX^{-1} = H_tridiag
@@ -187,11 +187,12 @@ def construct_PRNG_tuple(seed, n, verbose = 0):
         print("Deviation in measurement of tridiag step:", dev_step_tridiag)
     
     # construct the PRNGs
+    gen_exact = QiPRNG_exact(v0, eigs, M)
     gen_diag = QiPRNG_diag(v0, eigs, M)
     gen_tridiag = QiPRNG_tridiag(v0_tridiag, alpha, beta, M_tridiag)
     gen_dense = QiPRNG_dense(v0_dense, H_dense, M_dense)
     
-    return gen_diag, gen_tridiag, gen_dense
+    return gen_exact, gen_diag, gen_tridiag, gen_dense
 
 import sys
 sys.path.append('sp800_22_tests_python3')
@@ -199,42 +200,29 @@ from sp800_22_tests import run_tests
 import csv
 import os
 
-def generate_and_test(seed, n_dims, n_bits, results_filename, delete_after = False):
-    gen_diag, gen_tridiag, gen_dense = construct_PRNG_tuple(seed, n_dims)
+def generate_and_test(generator, suffix, seed, n_dims, n_bits, results_dict, delete_after = False):
+    filename = "data_%d_%d_%d_%s.bin" % (seed, n_dims, n_bits, suffix)
+    generate_datafile(filename, generator, n_bits)
+    
+    results = run_tests(filename)
+    for test_name,p_value,passed in results:
+        results_dict[test_name + "_" + suffix] = p_value
+    
+    if delete_after:
+        os.remove(filename)
+
+def generate_batch_and_save(seed, n_dims, n_bits, results_filename, delete_after = False):
+    # construct the generators
+    gen_exact, gen_diag, gen_tridiag, gen_dense = construct_PRNG_tuple(seed, n_dims)
     row_dict = {"seed":seed, "n_dims":n_dims, "n_bits":n_bits}
     
-    # Now we generate the binary files
+    # generate and process the data
+    generate_and_test(gen_exact  , "exact"  , seed, n_dims, n_bits, row_dict, delete_after)
+    generate_and_test(gen_diag   , "diag"   , seed, n_dims, n_bits, row_dict, delete_after)
+    generate_and_test(gen_tridiag, "tridiag", seed, n_dims, n_bits, row_dict, delete_after)
+    generate_and_test(gen_dense  , "dense"  , seed, n_dims, n_bits, row_dict, delete_after)
     
-    filename_diag = "data_%d_%d_%d_diag.bin" % (seed, n_dims, n_bits)
-    generate_datafile(filename_diag, gen_diag, n_bits)
-    
-    results = run_tests(filename_diag)
-    for test_name,p_value,passed in results:
-        row_dict[test_name + "_diag"] = p_value
-    
-    if delete_after:
-        os.remove(filename_diag)
-    
-    filename_tridiag = "data_%d_%d_%d_tridiag.bin" % (seed, n_dims, n_bits)
-    generate_datafile(filename_tridiag, gen_tridiag, n_bits)
-    
-    results = run_tests(filename_tridiag)
-    for test_name,p_value,passed in results:
-        row_dict[test_name + "_tridiag"] = p_value
-    
-    if delete_after:
-        os.remove(filename_tridiag)
-    
-    filename_dense = "data_%d_%d_%d_dense.bin" % (seed, n_dims, n_bits)
-    generate_datafile(filename_dense, gen_dense, n_bits)
-    
-    results = run_tests(filename_dense)
-    for test_name,p_value,passed in results:
-        row_dict[test_name + "_dense"] = p_value
-    
-    if delete_after:
-        os.remove(filename_dense)
-    
+    # write the results to a file
     make_hdr = not os.path.isfile(results_filename)
     with open(results_filename, 'a') as f:
         writer = csv.DictWriter(f, fieldnames = row_dict.keys())
@@ -244,7 +232,7 @@ def generate_and_test(seed, n_dims, n_bits, results_filename, delete_after = Fal
         writer.writerow(row_dict)
 
 for i in range(100):
-    generate_and_test(i, 5, 100000, "results.csv", True)
+    generate_batch_and_save(i, 5, 1000, "results.csv", True)
 
 # def plot_results(results_filename):
 #     # and plot the results

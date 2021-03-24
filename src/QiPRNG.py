@@ -279,3 +279,36 @@ def QiPRNG_diag(v0, eigs, M, verbosity = 0):
             for k in range(len(b) // 2):
                 yield b[k]
 
+# Quantum-inspired PRNG supporting diagonal Hamiltonians
+def QiPRNG_exact(v0, eigs, M, verbosity = 0):
+    # the dimension of the walk
+    N = len(eigs)
+    
+    # constructing the initial state in the span{ |psi_j> } space
+    initial_state = v0
+    T = 0
+    
+    # the core loop: evolving the state and yielding the probabilities
+    while True:
+        # increment the time
+        T += 1
+        
+        # compute the diagonal elements of the walk operator to the Tth power
+        W = np.exp(np.array(eigs, dtype=np.complex128) * T * (0+1j))
+    
+        # evolve to the current timestep
+        current_state = W * initial_state
+        
+        # find the amplitudes in the given basis
+        amps = M.dot(current_state)
+        for j in range(N):
+            # get the probabilities
+            prob_j = np.real(amps[j])**2 + np.imag(amps[j])**2
+            
+            # get bytes with a little-endian arrangement
+            b = struct.pack("<d", prob_j)
+            
+            # yield the less significant half of the bytes
+            for k in range(len(b) // 2):
+                yield b[k]
+
