@@ -163,7 +163,7 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
             prob_j = np.real(amps[j])**2 + np.imag(amps[j])**2
             
             # get bits with a little-endian arrangement
-            b = struct.pack("<f", prob_j)
+            b = struct.pack("<d", prob_j)
             
             # yield the less significant half of the bytes
             for k in range(len(b) // 2):
@@ -243,7 +243,7 @@ def QiPRNG_tridiag(v0, alpha, beta, M, verbosity = 0):
             prob_j = np.real(amps[j])**2 + np.imag(amps[j])**2
             
             # get bits with a little-endian arrangement
-            b = struct.pack("<f", prob_j)
+            b = struct.pack("<d", prob_j)
             
             # yield the less significant half of the bytes
             for k in range(len(b) // 2):
@@ -273,7 +273,7 @@ def QiPRNG_diag(v0, eigs, M, verbosity = 0):
             prob_j = np.real(amps[j])**2 + np.imag(amps[j])**2
             
             # get bits with a little-endian arrangement
-            b = struct.pack("<f", prob_j)
+            b = struct.pack("<d", prob_j)
             
             # yield the less significant half of the bytes
             for k in range(len(b) // 2):

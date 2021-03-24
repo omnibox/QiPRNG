@@ -201,7 +201,7 @@ import os
 
 def generate_and_test(seed, n_dims, n_bits, results_filename, delete_after = False):
     gen_diag, gen_tridiag, gen_dense = construct_PRNG_tuple(seed, n_dims)
-    row_dict = {"seed":seed}
+    row_dict = {"seed":seed, "n_dims":n_dims, "n_bits":n_bits}
     
     # Now we generate the binary files
     
@@ -244,7 +244,7 @@ def generate_and_test(seed, n_dims, n_bits, results_filename, delete_after = Fal
         writer.writerow(row_dict)
 
 for i in range(100):
-    generate_and_test(i, 5, 10000, "results.csv", True)
+    generate_and_test(i, 5, 100000, "results.csv", True)
 
 # def plot_results(results_filename):
 #     # and plot the results
