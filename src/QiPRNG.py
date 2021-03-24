@@ -231,11 +231,6 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
         print("Finished constructing walk operator")
         print("Deviation from unitarity: ", dev)
     
-    # tridiagonalize W for efficient computation
-    # W_tridiag = XWX^{-1}
-    W_tridiag, X = Lanczos(W)
-    # TODO: Currently this function is called, but it is not used.
-    
     # constructing the initial state in the span{ |psi_j> } space
     initial_state = T.dot(v0)
     current_state = initial_state
@@ -417,55 +412,75 @@ M = sp.stats.unitary_group.rvs(n)
 X = sp.stats.unitary_group.rvs(n)
 H_dense = X.dot(sp.sparse.diags([eigs], [0]).dot(X.conjugate().transpose()))
 M_dense = M.dot(X.conjugate().transpose())
+v0_dense = X.dot(v0)
 
 alpha, beta, X_tri = Householder(H_dense, 0)
 M_tridiag = M_dense.dot(X_tri.conjugate().transpose())
+v0_tridiag = X_tri.dot(v0_dense)
 
 # restore the previous state of numpy's PRNG
 np.random.set_state(state)
 
 if print_deviations:
-    diag_mes = M.dot(sp.sparse.diags([eigs], [0]).dot(M.conjugate().transpose()))
-    dense_mes = M_dense.dot(H_dense.dot(M_dense.conjugate().transpose()))
+    mes_diag = M.dot(sp.sparse.diags([eigs], [0]).dot(M.conjugate().transpose()))
+    mes_dense = M_dense.dot(H_dense.dot(M_dense.conjugate().transpose()))
     
     H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
-    tridiag_mes = M_tridiag.dot(H_tridiag.dot(M_tridiag.conjugate().transpose()))
+    mes_tridiag = M_tridiag.dot(H_tridiag.dot(M_tridiag.conjugate().transpose()))
     
-    dev_dense = np.max(abs(diag_mes - dense_mes))
-    dev_tridiag = np.max(abs(diag_mes - tridiag_mes))
-    print("Deviation in dense:", dev_dense)
-    print("Deviation in tridiag:", dev_tridiag)
+    dev_dense = np.max(abs(mes_diag - mes_dense))
+    dev_tridiag = np.max(abs(mes_diag - mes_tridiag))
+    print("Deviation in dense Hamiltonian:", dev_dense)
+    print("Deviation in tridiag Hamiltonian:", dev_tridiag)
+    
+    step_diag = M.dot(sp.sparse.diags([eigs], [0]).dot(v0))
+    step_dense = M_dense.dot(H_dense.dot(v0_dense))
+    step_tridiag = M_tridiag.dot(H_tridiag.dot(v0_tridiag))
+    
+    dev_step_dense = np.max(abs(step_diag - step_dense))
+    dev_step_tridiag = np.max(abs(step_diag - step_tridiag))
+    print("Deviation in measurement of dense step:", dev_step_dense)
+    print("Deviation in measurement of tridiag step:", dev_step_tridiag)
 
-# # Now we generate the binary files
+# Now we generate the binary files
 
-# import time
-# t = time.time()
-# generate_datafile("data_diag_1e3.bin", QiPRNG_diag(v0, alpha, M), 1000)
-# generate_datafile("data_diag_1e4.bin", QiPRNG_diag(v0, alpha, M), 10000)
-# generate_datafile("data_diag_1e5.bin", QiPRNG_diag(v0, alpha, M), 100000)
-# generate_datafile("data_diag_1e6.bin", QiPRNG_diag(v0, alpha, M), 1000000)
-# print("Time elapsed: %.3f" % (time.time() - t))
+NUM_BITS = 10000
 
-# t = time.time()
-# generate_datafile("data_tridiag_1e3.bin", QiPRNG_tridiag(v0, alpha, beta, M), 1000)
-# generate_datafile("data_tridiag_1e4.bin", QiPRNG_tridiag(v0, alpha, beta, M), 10000)
-# generate_datafile("data_tridiag_1e5.bin", QiPRNG_tridiag(v0, alpha, beta, M), 100000)
-# generate_datafile("data_tridiag_1e6.bin", QiPRNG_tridiag(v0, alpha, beta, M), 1000000)
-# print("Time elapsed: %.3f" % (time.time() - t))
+import time
+t = time.time()
+generate_datafile("data_diag_1e5.bin", QiPRNG_diag(v0, eigs, M), NUM_BITS)
+print("Time elapsed: %.3f" % (time.time() - t))
 
-# t = time.time()
-# generate_datafile("data_dense_1e3.bin", QiPRNG_dense(v0, H, M), 1000)
-# generate_datafile("data_dense_1e4.bin", QiPRNG_dense(v0, H, M), 10000)
-# generate_datafile("data_dense_1e5.bin", QiPRNG_dense(v0, H, M), 100000)
-# generate_datafile("data_dense_1e6.bin", QiPRNG_dense(v0, H, M), 1000000)
-# print("Time elapsed: %.3f" % (time.time() - t))
+t = time.time()
+generate_datafile("data_tridiag_1e5.bin", QiPRNG_tridiag(v0_tridiag, alpha, beta, M_tridiag), NUM_BITS)
+print("Time elapsed: %.3f" % (time.time() - t))
+
+t = time.time()
+generate_datafile("data_dense_1e5.bin", QiPRNG_dense(v0_dense, H_dense, M_dense), NUM_BITS)
+print("Time elapsed: %.3f" % (time.time() - t))
 
 
-# # And run some tests on one of the sequences generated
+# run some tests on the sequences generated
 
-# import sys
-# sys.path.append('../sp800_22_tests_python3')
-# from sp800_22_tests import run_tests
+import sys
+sys.path.append('sp800_22_tests_python3')
+from sp800_22_tests import run_tests
 
-# results = run_tests("data_dense_1e3.bin")
+filenames = ["data_diag_1e5.bin", "data_tridiag_1e5.bin", "data_dense_1e5.bin"]
+probs = np.zeros((15,3), dtype=float)
+for i,f in enumerate(filenames):
+    results = run_tests(f)
+    probs[:,i] = np.array(results, dtype=object)[:,1].astype(float)
 
+
+# and plot the results
+
+import matplotlib.pyplot as plt
+
+for i in range(3):
+    plt.bar(np.arange(len(probs[:,i]))+0.2 * i, probs[:,i], width=0.2, label=filenames[i])
+
+plt.ylabel("probability (low means fail)")
+plt.xlabel("test index")
+plt.legend()
+plt.show()
