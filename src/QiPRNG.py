@@ -29,6 +29,7 @@ import scipy as sp
 import scipy.sparse
 import scipy.sparse.linalg
 import struct
+import scipy.stats
 
 def find_principal_eig(A):
     """
@@ -118,15 +119,15 @@ def Lanczos(H, verbosity = 0):
     # restore the previous state of numpy's PRNG
     np.random.set_state(state)
     
-    H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
-    
     if verbosity >= 1:
+        H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
+        
         unit_dev = np.max(X.conjugate().transpose().dot(X) - np.eye(H.shape[0])).real
         trid_dev = np.max(X.conjugate().transpose().dot(H.dot(X)) - H_tridiag).real
         print("Deviation from unitarity:", unit_dev)
         print("Deviation from tridiagonality:", trid_dev)
     
-    return H_tridiag, X
+    return alpha, beta, X
 
 def Householder(H, verbosity = 0):
     v = H[:,0].copy()
@@ -134,9 +135,9 @@ def Householder(H, verbosity = 0):
     v[1] += np.linalg.norm(H[1:,0]) * H[1,0] / abs(H[1,0])
     v /= np.linalg.norm(v)
     
-    P = np.eye(H.shape[0]) - 2 * np.outer(v,v.conjugate())
-    A = P.dot(H.dot(P))
-    X = P
+    R = np.eye(H.shape[0]) - 2 * np.outer(v,v.conjugate())
+    A = R.dot(H.dot(R))
+    X = R
     
     for k in range(1,H.shape[0]-2):
         v = A[:,k].copy()
@@ -144,9 +145,9 @@ def Householder(H, verbosity = 0):
         v[k+1] += np.linalg.norm(A[k+1:,k]) * A[k+1,k] / abs(A[k+1,k])
         v /= np.linalg.norm(v)
         
-        P = np.eye(A.shape[0]) - 2 * np.outer(v,v.conjugate())
-        A = P.dot(A.dot(P))
-        X = P.dot(X)
+        R = np.eye(A.shape[0]) - 2 * np.outer(v,v.conjugate())
+        A = R.dot(A.dot(R))
+        X = R.dot(X)
     
     alpha = np.zeros(H.shape[0], np.complex128)
     beta = np.zeros(H.shape[0]-1, np.complex128)
@@ -155,15 +156,15 @@ def Householder(H, verbosity = 0):
         alpha[j] = A[j,j]
         beta[j-1] = A[j-1,j]
     
-    H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
-    
     if verbosity >= 1:
+        H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
+        
         unit_dev = np.max(X.dot(X.conjugate().transpose()) - np.eye(H.shape[0])).real
         trid_dev = np.max(X.dot(H.dot(X.conjugate().transpose())) - H_tridiag).real
         print("Deviation from unitarity:", unit_dev)
         print("Deviation from tridiagonality:", trid_dev)
     
-    return H_tridiag, X
+    return alpha, beta, X
 
 # Quantum-inspired PRNG supporting dense Hamiltonians
 def QiPRNG_dense(v0, H, M, verbosity = 0):
@@ -387,31 +388,42 @@ def generate_datafile(filename, generator, num_bytes):
                 print('\r%3d%% complete' % (i // update_period), end="")
         print("\r100% complete")
 
-# # the initial state (human selected)
-# v0 = np.array([1, 2, 1, 1, 2], dtype=np.complex128)
-# v0 /= np.linalg.norm(v0)
+# the dimension of the system to be simulated
+n = 5
 
-# # from Lanczos' algorithm, the diagonals in H
-# # these numbers have no particular meaning
-# # (i.e. they were written at random by a human)
-# alpha = [1, 2, 3, 4, 5]
-# beta = [1, 9, 8, 7 + 7j]
+# save the state of numpy's PRNG
+state = np.random.get_state()
 
-# state = np.random.get_state()
-# # make the code deterministic
-# np.random.seed(1337)
-    
-# # we need a measurement basis. Normally it should be unitary,
-# # but any matrix can be used.
-# M = np.random.random((5,5))
+# make the code deterministic
+np.random.seed(1357)
 
-# # Let's choose a random dense Hamiltonian while we're here
-# H = np.random.random((5,5))
-# H += H.transpose()
+# select a random normalized starting vector
+# since elements are normally distrbuted there is no angular bias
+v0 = np.random.normal(size = n).astype(np.complex128) - 0.5
+v0 += np.random.normal(size = n).astype(np.complex128) * (0+1j) - (0 + 0.5j)
+v0 /= np.linalg.norm(v0,2)
 
-# # restore the previous state of numpy's PRNG
-# np.random.set_state(state)
+# generating the eigenvalues in [0,1) for the diagonal system
+eigs = np.random.uniform(size = n).astype(np.complex128)
 
+# we need a measurement basis
+M = sp.stats.unitary_group.rvs(n)
+
+# enerating corresponding dense and tridiagonal Hamiltonians
+X = sp.stats.unitary_group.rvs(n)
+H_dense = X.dot(sp.sparse.diags([eigs], [0]).dot(X))
+M_dense = X.dot(M.dot(X))
+alpha, beta, X_tri = Householder(H_dense, 0)
+M_tridiag = X_tri.dot(M_dense.dot(X_tri))
+
+# restore the previous state of numpy's PRNG
+np.random.set_state(state)
+
+print(M.dot(sp.sparse.diags([eigs], [0]).dot(M.conjugate().transpose())))
+print(M_dense.dot(H_dense.dot(M_dense.conjugate().transpose())))
+
+H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
+print(M_tridiag.dot(H_tridiag.dot(M_tridiag.conjugate().transpose())))
 
 # # Now we generate the binary files
 
@@ -445,9 +457,4 @@ def generate_datafile(filename, generator, num_bytes):
 # from sp800_22_tests import run_tests
 
 # results = run_tests("data_dense_1e3.bin")
-
-H = np.random.random((4,4)).astype(np.complex128)
-H += np.random.random((4,4)).astype(np.complex128) * (0 + 1j)
-H += H.conjugate().transpose()
-H_t, X = Householder(H, 1)
 
