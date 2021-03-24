@@ -1,11 +1,27 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Tue Feb 23 12:31:29 2021
+Copyright (C) 2021 Aaron Gregory
+This program is distributed under the terms of the GNU General Public License.
 
-Relevant paper: "Novel pseudo-random number generator based on quantum random walks"
+This file contains four distinct implementations of QiPRNG, a quantum-inspired
+pseudorangom number generator. All are mathematically equivalent in exact
+arithmetic, varying only in the effect finite precision math  has on their
+output. This is determined by the format of the Hamiltonians: we give dense,
+tridiagonal, diagonal, and exact versions.
 
-@author: Aaron Gregory
+QiPRNG is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 2 of the License, or
+(at your option) any later version.
+
+QiPRNG is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with QiPRNG. If not, see <http://www.gnu.org/licenses/>.
 """
 
 import numpy as np
@@ -15,39 +31,164 @@ import scipy.sparse.linalg
 import struct
 
 def find_principal_eig(A):
+    """
+    Computes the largest eigenvector/value pair for a given matrix.
+    
+    This function is needed because ARPACK uses random initialization
+    points before applying Krylov iterations, and that leads to
+    nondeterministic behaviour (not a great thing for a PRNG). Here we
+    use a pseudorandom starting point by seeding numpy's PRNG with a hash
+    from the input matrix.
+
+    Parameters
+    ----------
+    A : 2D numpy or scipy array
+        The matrix to find the largest eigenvector/value pair for.
+
+    Returns
+    -------
+    lambda : float
+        The largest eigenvalue of A.
+    x : numpy array
+        The eigenvector of A with eigenvalue lambda.
+
+    """
     state = np.random.get_state()
     # make the solver deterministic
     np.random.seed(np.uint32(hash(str(A))))
     
     # select a random normalized starting vector
     x = np.random.random(A.shape[0]).astype(np.complex128) - 0.5
-    x += np.random.random(A.shape[0]).astype(np.complex128) * (0+1j)
+    x += np.random.random(A.shape[0]).astype(np.complex128) * (0+1j) - (0 + 0.5j)
     x /= np.linalg.norm(x,2)
     
     # restore the previous state of numpy's PRNG
     np.random.set_state(state)
     
-    # solving by gradient descent
-#    for i in range(100):
-#        grad = 2 * (A.dot(x) - np.conjugate(x).dot(A.dot(x)) * x)
-#        x += grad / (i+1)
-#        x /= np.linalg.norm(x,2)
-    
-    # solving by power iteration
+    # solving by 100 steps of power iteration
     for i in range(100):
         x = A.dot(x)
         x /= np.linalg.norm(x,2)
     
     return np.conjugate(x).dot(A.dot(x)), x
 
-# TODO: Implement the Lanczos algorithm
 # The returned values will be a sparse matrix H_tridiag
 # and a dense change of basis matrix X such that XHX^{-1} = H_tridiag
-def Lanczos(H):
-    return H, np.eye(H.shape[0])
+# WARNING: The Lanczos algorithm is numerically unstable.
+# Householder rotations are the preferred method of tridiagonalization.
+def Lanczos(H, verbosity = 0):
+    state = np.random.get_state()
+    # make the algorithm deterministic
+    np.random.seed(np.uint32(hash(str(H))))
+    
+    # select a random normalized starting vector
+    v = np.random.random(H.shape[0]).astype(np.complex128) - 0.5
+    v += np.random.random(H.shape[0]).astype(np.complex128) * (0+1j) - (0 + 0.5j)
+    v /= np.linalg.norm(v,2)
+    
+    alpha = np.zeros(H.shape[0], dtype=np.complex128)
+    beta = np.zeros(H.shape[0] - 1, dtype=np.complex128)
+    X = np.zeros(H.shape, dtype=np.complex128)
+    X[:,0] = v
+    
+    wp = H.dot(X[:,0])
+    alpha[0] = wp.conjugate().dot(X[:,0])
+    w = wp - alpha[0] * X[:,0]
+    
+    for j in range(1, H.shape[0]):
+        beta[j-1] = np.linalg.norm(w)
+        if beta[j-1] != 0:
+            if verbosity >= 2:
+                print("Warning: beta[%d] = 0 found in Lanczos(...)" % (j-1))
+            
+            X[:,j] = w / beta[j-1]
+        else:
+            v = np.random.random(H.shape[0]).astype(np.complex128) - 0.5
+            v += np.random.random(H.shape[0]).astype(np.complex128) * (0+1j) - (0 + 0.5j)
+            for k in range(j):
+                v -= X[:,k] * X[:,k].conjugate().dot(v)
+            
+            v /= np.linalg.norm(v,2)
+            X[:,j] = v
+        
+        wp = H.dot(X[:,j])
+        alpha[j] = wp.conjugate().dot(X[:,j])
+        w = wp - alpha[j] * X[:,j] - beta[j-1] * X[:,j-1]
+    
+    # restore the previous state of numpy's PRNG
+    np.random.set_state(state)
+    
+    H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
+    
+    if verbosity >= 1:
+        unit_dev = np.max(X.conjugate().transpose().dot(X) - np.eye(H.shape[0])).real
+        trid_dev = np.max(X.conjugate().transpose().dot(H.dot(X)) - H_tridiag).real
+        print("Deviation from unitarity:", unit_dev)
+        print("Deviation from tridiagonality:", trid_dev)
+    
+    return H_tridiag, X
+
+def Householder(H, verbosity = 0):
+    v = H[:,0].copy()
+    v[0] = 0
+    v[1] += np.linalg.norm(H[1:,0]) * H[1,0] / abs(H[1,0])
+    v /= np.linalg.norm(v)
+    
+    P = np.eye(H.shape[0]) - 2 * np.outer(v,v.conjugate())
+    A = P.dot(H.dot(P))
+    X = P
+    
+    for k in range(1,H.shape[0]-2):
+        v = A[:,k].copy()
+        v[:k+1] = 0
+        v[k+1] += np.linalg.norm(A[k+1:,k]) * A[k+1,k] / abs(A[k+1,k])
+        v /= np.linalg.norm(v)
+        
+        P = np.eye(A.shape[0]) - 2 * np.outer(v,v.conjugate())
+        A = P.dot(A.dot(P))
+        X = P.dot(X)
+    
+    alpha = np.zeros(H.shape[0], np.complex128)
+    beta = np.zeros(H.shape[0]-1, np.complex128)
+    alpha[0] = A[0,0]
+    for j in range(1,H.shape[0]):
+        alpha[j] = A[j,j]
+        beta[j-1] = A[j-1,j]
+    
+    H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
+    
+    if verbosity >= 1:
+        unit_dev = np.max(X.dot(X.conjugate().transpose()) - np.eye(H.shape[0])).real
+        trid_dev = np.max(X.dot(H.dot(X.conjugate().transpose())) - H_tridiag).real
+        print("Deviation from unitarity:", unit_dev)
+        print("Deviation from tridiagonality:", trid_dev)
+    
+    return H_tridiag, X
 
 # Quantum-inspired PRNG supporting dense Hamiltonians
 def QiPRNG_dense(v0, H, M, verbosity = 0):
+    """
+    Implementation of QiPRNG for dense Hamiltonians. Given information
+    specifying a quantum system, constructs a DTQW and yields the least
+    significant bits from the measurement probabilities.
+
+    Parameters
+    ----------
+    v0 : 1D numpy array
+        The initial state for the walk.
+    H : 2D numpy array
+        The Hamiltonian for the walk.
+    M : 2D numpy array
+        The measurement basis.
+    verbosity : int, optional
+        Level of messages to print. The default is 0, which means silence.
+
+    Yields
+    ------
+    int
+        A stream of pseudorandom bytes.
+
+    """
     # the dimension of the walk
     N = H.shape[0]
     
@@ -57,7 +198,7 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
     # POTENTIAL PROBLEM: scipy.sparse.linalg.eigsh exhibits nondeterministic
     # behavior due to random starting points for iteration; the relevant code is
     # buried somewhere in the fortran of ARPACK. Here we use a custom method
-    # instead. Less accuracy and efficiency, but deterministic.
+    # instead. Lower accuracy and efficiency, but deterministic.
     
     # finding |abs(H)| and |d> for equation (4)
     A_norm, d = find_principal_eig(A)
@@ -246,64 +387,67 @@ def generate_datafile(filename, generator, num_bytes):
                 print('\r%3d%% complete' % (i // update_period), end="")
         print("\r100% complete")
 
-# the initial state (human selected)
-v0 = np.array([1, 2, 1, 1, 2], dtype=np.complex128)
-v0 /= np.linalg.norm(v0)
+# # the initial state (human selected)
+# v0 = np.array([1, 2, 1, 1, 2], dtype=np.complex128)
+# v0 /= np.linalg.norm(v0)
 
-# from Lanczos' algorithm, the diagonals in H
-# these numbers have no particular meaning
-# (i.e. they were written at random by a human)
-alpha = [1, 2, 3, 4, 5]
-beta = [1, 9, 8, 7 + 7j]
+# # from Lanczos' algorithm, the diagonals in H
+# # these numbers have no particular meaning
+# # (i.e. they were written at random by a human)
+# alpha = [1, 2, 3, 4, 5]
+# beta = [1, 9, 8, 7 + 7j]
 
-state = np.random.get_state()
-# make the code deterministic
-np.random.seed(1337)
+# state = np.random.get_state()
+# # make the code deterministic
+# np.random.seed(1337)
     
-# we need a measurement basis. Normally it should be unitary,
-# but any matrix can be used.
-M = np.random.random((5,5))
+# # we need a measurement basis. Normally it should be unitary,
+# # but any matrix can be used.
+# M = np.random.random((5,5))
 
-# Let's choose a random dense Hamiltonian while we're here
-H = np.random.random((5,5))
-H += H.transpose()
+# # Let's choose a random dense Hamiltonian while we're here
+# H = np.random.random((5,5))
+# H += H.transpose()
 
-# restore the previous state of numpy's PRNG
-np.random.set_state(state)
-
-
-# Now we generate the binary files
-
-import time
-t = time.time()
-generate_datafile("data_diag_1e3.bin", QiPRNG_diag(v0, alpha, M), 1000)
-generate_datafile("data_diag_1e4.bin", QiPRNG_diag(v0, alpha, M), 10000)
-generate_datafile("data_diag_1e5.bin", QiPRNG_diag(v0, alpha, M), 100000)
-generate_datafile("data_diag_1e6.bin", QiPRNG_diag(v0, alpha, M), 1000000)
-print("Time elapsed: %.3f" % (time.time() - t))
-
-t = time.time()
-generate_datafile("data_tridiag_1e3.bin", QiPRNG_tridiag(v0, alpha, beta, M), 1000)
-generate_datafile("data_tridiag_1e4.bin", QiPRNG_tridiag(v0, alpha, beta, M), 10000)
-generate_datafile("data_tridiag_1e5.bin", QiPRNG_tridiag(v0, alpha, beta, M), 100000)
-generate_datafile("data_tridiag_1e6.bin", QiPRNG_tridiag(v0, alpha, beta, M), 1000000)
-print("Time elapsed: %.3f" % (time.time() - t))
-
-t = time.time()
-generate_datafile("data_dense_1e3.bin", QiPRNG_dense(v0, H, M), 1000)
-generate_datafile("data_dense_1e4.bin", QiPRNG_dense(v0, H, M), 10000)
-generate_datafile("data_dense_1e5.bin", QiPRNG_dense(v0, H, M), 100000)
-generate_datafile("data_dense_1e6.bin", QiPRNG_dense(v0, H, M), 1000000)
-print("Time elapsed: %.3f" % (time.time() - t))
+# # restore the previous state of numpy's PRNG
+# np.random.set_state(state)
 
 
-# And run some tests on one of the sequences generated
+# # Now we generate the binary files
 
-import sys
-sys.path.append('../sp800_22_tests_python3')
-from sp800_22_tests import run_tests
+# import time
+# t = time.time()
+# generate_datafile("data_diag_1e3.bin", QiPRNG_diag(v0, alpha, M), 1000)
+# generate_datafile("data_diag_1e4.bin", QiPRNG_diag(v0, alpha, M), 10000)
+# generate_datafile("data_diag_1e5.bin", QiPRNG_diag(v0, alpha, M), 100000)
+# generate_datafile("data_diag_1e6.bin", QiPRNG_diag(v0, alpha, M), 1000000)
+# print("Time elapsed: %.3f" % (time.time() - t))
 
-results = run_tests("data_dense_1e3.bin")
+# t = time.time()
+# generate_datafile("data_tridiag_1e3.bin", QiPRNG_tridiag(v0, alpha, beta, M), 1000)
+# generate_datafile("data_tridiag_1e4.bin", QiPRNG_tridiag(v0, alpha, beta, M), 10000)
+# generate_datafile("data_tridiag_1e5.bin", QiPRNG_tridiag(v0, alpha, beta, M), 100000)
+# generate_datafile("data_tridiag_1e6.bin", QiPRNG_tridiag(v0, alpha, beta, M), 1000000)
+# print("Time elapsed: %.3f" % (time.time() - t))
+
+# t = time.time()
+# generate_datafile("data_dense_1e3.bin", QiPRNG_dense(v0, H, M), 1000)
+# generate_datafile("data_dense_1e4.bin", QiPRNG_dense(v0, H, M), 10000)
+# generate_datafile("data_dense_1e5.bin", QiPRNG_dense(v0, H, M), 100000)
+# generate_datafile("data_dense_1e6.bin", QiPRNG_dense(v0, H, M), 1000000)
+# print("Time elapsed: %.3f" % (time.time() - t))
 
 
+# # And run some tests on one of the sequences generated
+
+# import sys
+# sys.path.append('../sp800_22_tests_python3')
+# from sp800_22_tests import run_tests
+
+# results = run_tests("data_dense_1e3.bin")
+
+H = np.random.random((4,4)).astype(np.complex128)
+H += np.random.random((4,4)).astype(np.complex128) * (0 + 1j)
+H += H.conjugate().transpose()
+H_t, X = Householder(H, 1)
 
