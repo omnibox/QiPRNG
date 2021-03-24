@@ -388,6 +388,10 @@ def generate_datafile(filename, generator, num_bytes):
                 print('\r%3d%% complete' % (i // update_period), end="")
         print("\r100% complete")
 
+
+# whether we should show how successful the changes of basis were
+print_deviations = True
+
 # the dimension of the system to be simulated
 n = 5
 
@@ -411,19 +415,26 @@ M = sp.stats.unitary_group.rvs(n)
 
 # enerating corresponding dense and tridiagonal Hamiltonians
 X = sp.stats.unitary_group.rvs(n)
-H_dense = X.dot(sp.sparse.diags([eigs], [0]).dot(X))
-M_dense = X.dot(M.dot(X))
+H_dense = X.dot(sp.sparse.diags([eigs], [0]).dot(X.conjugate().transpose()))
+M_dense = M.dot(X.conjugate().transpose())
+
 alpha, beta, X_tri = Householder(H_dense, 0)
-M_tridiag = X_tri.dot(M_dense.dot(X_tri))
+M_tridiag = M_dense.dot(X_tri.conjugate().transpose())
 
 # restore the previous state of numpy's PRNG
 np.random.set_state(state)
 
-print(M.dot(sp.sparse.diags([eigs], [0]).dot(M.conjugate().transpose())))
-print(M_dense.dot(H_dense.dot(M_dense.conjugate().transpose())))
-
-H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
-print(M_tridiag.dot(H_tridiag.dot(M_tridiag.conjugate().transpose())))
+if print_deviations:
+    diag_mes = M.dot(sp.sparse.diags([eigs], [0]).dot(M.conjugate().transpose()))
+    dense_mes = M_dense.dot(H_dense.dot(M_dense.conjugate().transpose()))
+    
+    H_tridiag = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
+    tridiag_mes = M_tridiag.dot(H_tridiag.dot(M_tridiag.conjugate().transpose()))
+    
+    dev_dense = np.max(abs(diag_mes - dense_mes))
+    dev_tridiag = np.max(abs(diag_mes - tridiag_mes))
+    print("Deviation in dense:", dev_dense)
+    print("Deviation in tridiag:", dev_tridiag)
 
 # # Now we generate the binary files
 
