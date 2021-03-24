@@ -235,8 +235,6 @@ def generate_and_test(seed, n_dims, n_bits, results_filename, delete_after = Fal
     if delete_after:
         os.remove(filename_tridiag)
     
-    print(row_dict)
-    
     make_hdr = not os.path.isfile(results_filename)
     with open(results_filename, 'a') as f:
         writer = csv.DictWriter(f, fieldnames = row_dict.keys())
@@ -245,8 +243,8 @@ def generate_and_test(seed, n_dims, n_bits, results_filename, delete_after = Fal
         
         writer.writerow(row_dict)
 
-
-generate_and_test(0, 5, 10000, "results.csv")
+for i in range(100):
+    generate_and_test(i, 5, 10000, "results.csv", True)
 
 # def plot_results(results_filename):
 #     # and plot the results
