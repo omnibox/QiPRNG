@@ -233,7 +233,7 @@ def generate_and_test(seed, n_dims, n_bits, results_filename, delete_after = Fal
         row_dict[test_name + "_dense"] = p_value
     
     if delete_after:
-        os.remove(filename_tridiag)
+        os.remove(filename_dense)
     
     make_hdr = not os.path.isfile(results_filename)
     with open(results_filename, 'a') as f:
