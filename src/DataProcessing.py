@@ -29,6 +29,10 @@ import scipy.sparse.linalg
 import scipy.stats
 from QiPRNG import QiPRNG_exact, QiPRNG_diag, QiPRNG_tridiag, QiPRNG_dense
 
+N_DIMS = 10
+N_BITS = 1000
+RESULTS_FILENAME = "results.csv"
+
 # The returned values will be a sparse matrix H_tridiag
 # and a dense change of basis matrix X such that XHX^{-1} = H_tridiag
 # WARNING: The Lanczos algorithm is numerically unstable.
@@ -138,7 +142,7 @@ def construct_PRNG_tuple(seed, n, verbose = 0):
     state = np.random.get_state()
     
     # make the code deterministic
-    np.random.seed(1357)
+    np.random.seed(seed)
     
     # select a random normalized starting vector
     # since elements are normally distrbuted there is no angular bias
@@ -231,8 +235,40 @@ def generate_batch_and_save(seed, n_dims, n_bits, results_filename, delete_after
         
         writer.writerow(row_dict)
 
-for i in range(100):
-    generate_batch_and_save(i, 5, 1000, "results.csv", True)
+def max_seed_completed(n_dims, n_bits, results_filename):
+    if not os.path.isfile(results_filename):
+        return -1;
+    
+    max_seed = -1
+    with open(results_filename, 'r') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if n_dims == int(row["n_dims"]) and n_bits == int(row["n_bits"]):
+                max_seed = max(max_seed, int(row["seed"]))
+    
+    return max_seed
+
+import multiprocessing as mp
+def run_from_seed(seed):
+    generate_batch_and_save(seed, N_DIMS, N_BITS, RESULTS_FILENAME, True)
+
+def generate_parallel(num_seeds):
+
+    print("Found %d CPUs" % (mp.cpu_count()))
+    max_seed = max_seed_completed(N_DIMS, N_BITS, RESULTS_FILENAME)
+    print("Found results file with seeds up to %d" % (max_seed))
+    
+    pool = mp.Pool(mp.cpu_count())
+    pool.map(run_from_seed, np.arange(num_seeds) + max_seed + 1)
+    pool.close()
+
+def generate_serial(num_seeds):
+    max_seed = max_seed_completed(N_DIMS, N_BITS, RESULTS_FILENAME)
+    print("Found results file with seeds up to %d" % (max_seed))
+    
+    seeds_to_run = np.arange(num_seeds) + max_seed + 1
+    for seed in seeds_to_run:
+        generate_batch_and_save(seed, N_DIMS, N_BITS, RESULTS_FILENAME, True)
 
 # def plot_results(results_filename):
 #     # and plot the results
@@ -245,3 +281,13 @@ for i in range(100):
 #     plt.xlabel("test index")
 #     plt.legend()
 #     plt.show()
+
+
+
+
+
+if __name__ == "__main__":
+    generate_parallel(100)
+
+
+
