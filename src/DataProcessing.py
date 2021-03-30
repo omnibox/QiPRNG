@@ -30,7 +30,7 @@ import scipy.stats
 from QiPRNG import QiPRNG_exact, QiPRNG_diag, QiPRNG_tridiag, QiPRNG_dense
 
 N_DIMS = 10
-N_BITS = 1000
+N_BYTES = 150000
 RESULTS_FILENAME = "results.csv"
 
 # The returned values will be a sparse matrix H_tridiag
@@ -156,7 +156,7 @@ def construct_PRNG_tuple(seed, n, verbose = 0):
     # we need a measurement basis
     M = sp.stats.unitary_group.rvs(n)
     
-    # enerating corresponding dense and tridiagonal Hamiltonians
+    # generating corresponding dense and tridiagonal Hamiltonians
     X = sp.stats.unitary_group.rvs(n)
     H_dense = X.dot(sp.sparse.diags([eigs], [0]).dot(X.conjugate().transpose()))
     M_dense = M.dot(X.conjugate().transpose())
@@ -204,9 +204,9 @@ from sp800_22_tests import run_tests
 import csv
 import os
 
-def generate_and_test(generator, suffix, seed, n_dims, n_bits, results_dict, delete_after = False):
-    filename = "data_%d_%d_%d_%s.bin" % (seed, n_dims, n_bits, suffix)
-    generate_datafile(filename, generator, n_bits)
+def generate_and_test(generator, suffix, seed, n_dims, n_bytes, results_dict, delete_after = False):
+    filename = "data_%d_%d_%d_%s.bin" % (seed, n_dims, n_bytes, suffix)
+    generate_datafile(filename, generator, n_bytes)
     
     results = run_tests(filename)
     for test_name,p_value,passed in results:
@@ -215,16 +215,16 @@ def generate_and_test(generator, suffix, seed, n_dims, n_bits, results_dict, del
     if delete_after:
         os.remove(filename)
 
-def generate_batch_and_save(seed, n_dims, n_bits, results_filename, delete_after = False):
+def generate_batch_and_save(seed, n_dims, n_bytes, results_filename, delete_after = False):
     # construct the generators
     gen_exact, gen_diag, gen_tridiag, gen_dense = construct_PRNG_tuple(seed, n_dims)
-    row_dict = {"seed":seed, "n_dims":n_dims, "n_bits":n_bits}
+    row_dict = {"seed":seed, "n_dims":n_dims, "n_bytes":n_bytes}
     
     # generate and process the data
-    generate_and_test(gen_exact  , "exact"  , seed, n_dims, n_bits, row_dict, delete_after)
-    generate_and_test(gen_diag   , "diag"   , seed, n_dims, n_bits, row_dict, delete_after)
-    generate_and_test(gen_tridiag, "tridiag", seed, n_dims, n_bits, row_dict, delete_after)
-    generate_and_test(gen_dense  , "dense"  , seed, n_dims, n_bits, row_dict, delete_after)
+    generate_and_test(gen_exact  , "exact"  , seed, n_dims, n_bytes, row_dict, delete_after)
+    generate_and_test(gen_diag   , "diag"   , seed, n_dims, n_bytes, row_dict, delete_after)
+    generate_and_test(gen_tridiag, "tridiag", seed, n_dims, n_bytes, row_dict, delete_after)
+    generate_and_test(gen_dense  , "dense"  , seed, n_dims, n_bytes, row_dict, delete_after)
     
     # write the results to a file
     make_hdr = not os.path.isfile(results_filename)
@@ -250,12 +250,11 @@ def max_seed_completed(n_dims, n_bits, results_filename):
 
 import multiprocessing as mp
 def run_from_seed(seed):
-    generate_batch_and_save(seed, N_DIMS, N_BITS, RESULTS_FILENAME, True)
+    generate_batch_and_save(seed, N_DIMS, N_BYTES, RESULTS_FILENAME, True)
 
 def generate_parallel(num_seeds):
-
     print("Found %d CPUs" % (mp.cpu_count()))
-    max_seed = max_seed_completed(N_DIMS, N_BITS, RESULTS_FILENAME)
+    max_seed = max_seed_completed(N_DIMS, N_BYTES, RESULTS_FILENAME)
     print("Found results file with seeds up to %d" % (max_seed))
     
     pool = mp.Pool(mp.cpu_count())
@@ -263,12 +262,12 @@ def generate_parallel(num_seeds):
     pool.close()
 
 def generate_serial(num_seeds):
-    max_seed = max_seed_completed(N_DIMS, N_BITS, RESULTS_FILENAME)
+    max_seed = max_seed_completed(N_DIMS, N_BYTES, RESULTS_FILENAME)
     print("Found results file with seeds up to %d" % (max_seed))
     
     seeds_to_run = np.arange(num_seeds) + max_seed + 1
     for seed in seeds_to_run:
-        generate_batch_and_save(seed, N_DIMS, N_BITS, RESULTS_FILENAME, True)
+        generate_batch_and_save(seed, N_DIMS, N_BYTES, RESULTS_FILENAME, True)
 
 # def plot_results(results_filename):
 #     # and plot the results
@@ -285,9 +284,28 @@ def generate_serial(num_seeds):
 
 
 
-
+# import scipy.stats as ss
 if __name__ == "__main__":
     generate_parallel(100)
-
+#     seed = 2
+#     n_dims = 50
+#     N = 100000
+#     update_period = N // 100
+#     gen_exact, gen_diag, gen_tridiag, gen_dense = construct_PRNG_tuple(seed, n_dims)
+#     counts = np.zeros((4, 256), np.int32)
+#     individual_bits = np.zeros((4, 8), np.int32)
+#     res = []
+#     for i in range(N):
+#         for (j,gen) in enumerate([gen_exact, gen_diag, gen_tridiag, gen_dense]):
+#             b = gen.__next__()
+#             res += [b]
+#             counts[j,b] += 1
+#             for k in range(8):
+#                 individual_bits[j,k] += (b // 2**k) % 2
+            
+#         if i % update_period == 0:
+#             print('\r%3d%% complete' % (i // update_period), end="")
+# #            print([ss.kstest(c, ss.randint.cdf, args=(0,256)).pvalue for c in counts])
+#     print("\r100% complete")
 
 

@@ -166,7 +166,7 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
             b = struct.pack("<d", prob_j)
             
             # yield the less significant half of the bytes
-            for k in range(len(b) // 2):
+            for k in range(1, len(b) // 2):
                 yield b[k]
 
 # Quantum-inspired PRNG supporting Hamiltonians that have been tridiagonalized
@@ -246,7 +246,7 @@ def QiPRNG_tridiag(v0, alpha, beta, M, verbosity = 0):
             b = struct.pack("<d", prob_j)
             
             # yield the less significant half of the bytes
-            for k in range(len(b) // 2):
+            for k in range(1, len(b) // 2):
                 yield b[k]
 
 # Quantum-inspired PRNG supporting diagonal Hamiltonians
@@ -276,7 +276,7 @@ def QiPRNG_diag(v0, eigs, M, verbosity = 0):
             b = struct.pack("<d", prob_j)
             
             # yield the less significant half of the bytes
-            for k in range(len(b) // 2):
+            for k in range(1, len(b) // 2):
                 yield b[k]
 
 # Quantum-inspired PRNG supporting diagonal Hamiltonians
@@ -309,6 +309,8 @@ def QiPRNG_exact(v0, eigs, M, verbosity = 0):
             b = struct.pack("<d", prob_j)
             
             # yield the less significant half of the bytes
-            for k in range(len(b) // 2):
+            # we don't yield the least significant byte though, since for
+            # some reason the first bit in it is zero 60% of the time
+            for k in range(1, len(b) // 2):
                 yield b[k]
 
