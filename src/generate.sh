@@ -11,6 +11,6 @@
 
 module load anaconda/3
 
-cd /gpfs/home/afgregory
+cd /gpfs/home/afgregory/QiPRNG/src
 
 python DataProcessing.py
