@@ -1,0 +1,17 @@
+			  RANDOM EXCURSIONS TEST
+		--------------------------------------------
+		COMPUTATIONAL INFORMATION:
+		--------------------------------------------
+		(a) Number Of Cycles (J) = 0009
+		(b) Sequence Length (n)  = 1000000
+		(c) Rejection Constraint = 500.000000
+		-------------------------------------------
+SUCCESS		x = -4 chi^2 =  9.741821 p_value = 0.082890
+SUCCESS		x = -3 chi^2 =  6.445333 p_value = 0.265264
+SUCCESS		x = -2 chi^2 =  2.851852 p_value = 0.722813
+SUCCESS		x = -1 chi^2 =  6.111111 p_value = 0.295557
+FAILURE		x =  1 chi^2 = 17.444444 p_value = 0.003730
+SUCCESS		x =  2 chi^2 =  4.470508 p_value = 0.483839
+SUCCESS		x =  3 chi^2 =  8.241600 p_value = 0.143414
+SUCCESS		x =  4 chi^2 =  9.219075 p_value = 0.100639
+

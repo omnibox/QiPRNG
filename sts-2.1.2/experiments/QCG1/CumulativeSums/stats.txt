@@ -1,0 +1,16 @@
+		      CUMULATIVE SUMS (FORWARD) TEST
+		-------------------------------------------
+		COMPUTATIONAL INFORMATION:
+		-------------------------------------------
+		(a) The maximum partial sum = 18021
+		-------------------------------------------
+FAILURE		p_value = 0.000000
+
+		      CUMULATIVE SUMS (REVERSE) TEST
+		-------------------------------------------
+		COMPUTATIONAL INFORMATION:
+		-------------------------------------------
+		(a) The maximum partial sum = 18243
+		-------------------------------------------
+FAILURE		p_value = 0.000000
+
