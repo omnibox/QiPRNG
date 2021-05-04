@@ -56,14 +56,14 @@ int		cmp(const double *a, const double *b);
 int		computeMetrics(char *s, int test);
 
 void
-main_func(double* res)
+main_func(double* res, char* key)
 {
 	int		i;
 	int		option;			/* TEMPLATE LENGTH/STREAM LENGTH/GENERATOR*/
 	char	*streamFile;	/* STREAM FILENAME     */
 	
-
 	tp.n = 1000000;
+	tp.key = key;
 	tp.blockFrequencyBlockLength = 128;
 	tp.nonOverlappingTemplateBlockLength = 9;
 	tp.overlappingTemplateBlockLength = 9;

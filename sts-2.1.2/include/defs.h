@@ -68,6 +68,7 @@ typedef unsigned char	BitSequence;
 
 typedef struct _testParameters {
 	int		n;
+	char*	key;
 	int		blockFrequencyBlockLength;
 	int		nonOverlappingTemplateBlockLength;
 	int		overlappingTemplateBlockLength;

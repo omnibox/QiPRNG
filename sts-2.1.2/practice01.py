@@ -65,9 +65,12 @@ NUMOFPVALS = 188
 
 f = ctypes.CDLL("./lib.so")
 res = ctypes.pointer((ctypes.c_double * NUMOFPVALS)())
-f.main_func.argtypes = [type(res)]
+f.main_func.argtypes = [type(res), ctypes.c_char_p]
 
-f.main_func(res)
+s = "NameHere"
+buf = ctypes.create_string_buffer(len(s))
+buf.value = s.encode("utf-8")
+f.main_func(res, buf)
 
 print(res.contents[:])
 
