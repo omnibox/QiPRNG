@@ -55,8 +55,8 @@ void	postProcessResults(int option);
 int		cmp(const double *a, const double *b);
 int		computeMetrics(char *s, int test);
 
-int
-main(int argc, char *argv[])
+void
+main_func(double* res)
 {
 	int		i;
 	int		option;			/* TEMPLATE LENGTH/STREAM LENGTH/GENERATOR*/
@@ -108,10 +108,9 @@ main(int argc, char *argv[])
 	fclose(summary);
 	
 	for( i = 0; i < NUMOFPVALS; i++ ) {
+    	res[i] = pvals[i];
     	printf("%f\n", pvals[i]);
 	}
-
-	return 1;
 }
 
 void
