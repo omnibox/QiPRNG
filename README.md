@@ -5,4 +5,6 @@ For reference on the statistical tests, see [NIST's page](https://www.nist.gov/p
 
 # Usage Instructions
 
-If using the C implementations of SP800-22 test suite, navigate to the ```src``` directory and compile the library with ```cc -fPIC -shared -o sp800.so ./sp800_22_tests_c/src/*```. Data generation can then be invoked with ```python DataProcessing.py```, or ```sbatch generate.sh``` if running on a cluster.
+If using the [C implementations](https://csrc.nist.gov/Projects/Random-Bit-Generation/Documentation-and-Software) of the NIST SP 800-22 statistical suite, navigate to the ```src``` directory and compile the library with ```cc -fPIC -shared -o sp800.so ./sp800_22_tests_c/src/*```.
+
+Data generation can then be invoked with ```python DataProcessing.py```, or ```sbatch generate.sh``` if running on a cluster.
