@@ -34,8 +34,8 @@ N_BYTES = 1000000
 RESULTS_FILENAME = "../data/results.csv"
 BINARY_DATA_DIR = "../data/binary_data/"
 STATS_DATA_DIR = "../data/stats_output/"
-USE_C_IMPLEMENTATION = True
-# remember to compile the .so file with
+USE_C_IMPLEMENTATION = True # only set this true when N_BYTES is 1e6
+# remember to compile sp800.so with
 # cc -fPIC -shared -o sp800.so ./sp800_22_tests_c/src/*
 
 
@@ -584,7 +584,7 @@ def generate_serial(num_seeds):
 
 # import scipy.stats as ss
 if __name__ == "__main__":
-    generate_parallel(1)
+    generate_parallel(100)
 #     seed = 2
 #     n_dims = 50
 #     N = 100000
