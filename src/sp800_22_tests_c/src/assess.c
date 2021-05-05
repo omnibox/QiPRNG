@@ -56,7 +56,7 @@ int		cmp(const double *a, const double *b);
 int		computeMetrics(char *s, int test);
 
 void
-main_func(double* res, char* key)
+run_tests(double* res, char* key)
 {
 	int		i;
 	int		option;			/* TEMPLATE LENGTH/STREAM LENGTH/GENERATOR*/

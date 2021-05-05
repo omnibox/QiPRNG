@@ -30,8 +30,14 @@ import scipy.stats
 from QiPRNG import QiPRNG_exact, QiPRNG_diag, QiPRNG_tridiag, QiPRNG_dense
 
 N_DIMS = 10
-N_BYTES = 15000
-RESULTS_FILENAME = "results.csv"
+N_BYTES = 1000000
+RESULTS_FILENAME = "../data/results.csv"
+BINARY_DATA_DIR = "../data/binary_data/"
+STATS_DATA_DIR = "../data/stats_output/"
+USE_C_IMPLEMENTATION = True
+# remember to compile the .so file with
+# cc -fPIC -shared -o sp800.so ./sp800_22_tests_c/src/*
+
 
 def Lanczos(H, verbosity = 0):
     """
@@ -219,7 +225,7 @@ def generate_datafile(filename, generator, num_bytes, verbosity = 0):
         print("attempting to open %s..." % filename)
     
     update_period = num_bytes // 100
-    with open(filename, 'wb') as f:
+    with open(BINARY_DATA_DIR + filename, 'wb') as f:
         # announce that the file is open
         if verbosity >= 2:
             print("generating %s..." % filename)
@@ -334,8 +340,15 @@ def construct_PRNG_tuple(seed, n_dims, verbosity = 0):
     return gen_exact, gen_diag, gen_tridiag, gen_dense
 
 import sys
-sys.path.append('sp800_22_tests_python3')
-from sp800_22_tests import run_tests
+import shutil
+if USE_C_IMPLEMENTATION:
+    import ctypes
+    NUMOFPVALS = 188
+    sp800 = ctypes.CDLL("./sp800.so")
+    sp800.run_tests.argtypes = [type(ctypes.pointer((ctypes.c_double * NUMOFPVALS)())), ctypes.c_char_p]
+else:
+    sys.path.append('sp800_22_tests_python3')
+    from sp800_22_tests import run_tests_python
 import csv
 import os
 
@@ -364,7 +377,6 @@ def generate_and_test(generator, suffix, seed, n_dims, n_bytes, results_dict, de
     delete_after : boolean, optional
         Whether to delete the binary data files after testing is complete.
         The default is False.
-
     Returns
     -------
     None.
@@ -374,16 +386,36 @@ def generate_and_test(generator, suffix, seed, n_dims, n_bytes, results_dict, de
     filename = "data_%d_%d_%d_%s.bin" % (seed, n_dims, n_bytes, suffix)
     generate_datafile(filename, generator, n_bytes)
     
-    # run tests on the pseudorandom datafile
-    results = run_tests(filename)
-    
-    # write the results to the dictionary
-    for test_name,p_value,passed in results:
-        results_dict[test_name + "_" + suffix] = p_value
+    if USE_C_IMPLEMENTATION:
+        # get the filename without the suffix
+        key = filename.split(".")[0]
+        
+        # build the arguments and pass them to the c library
+        pvals_buffer = ctypes.pointer((ctypes.c_double * NUMOFPVALS)())
+        filename_buffer = ctypes.create_string_buffer(len(key) + 1)
+        filename_buffer.value = key.encode("utf-8")
+        sp800.run_tests(pvals_buffer, filename_buffer)
+        
+        print(pvals_buffer.contents[:])
+        
+        # save the results to the library
+        for index,p_value in enumerate(pvals_buffer.contents):
+            results_dict["test_%03d_%s" % (index, suffix)] = p_value
+        
+        # remove the directory used by the C implementation
+        if delete_after:
+            shutil.rmtree(STATS_DATA_DIR + key)
+    else:
+        # run tests on the pseudorandom datafile
+        results = run_tests_python(BINARY_DATA_DIR + filename)
+        
+        # write the results to the dictionary
+        for test_name,p_value,passed in results:
+            results_dict[test_name + "_" + suffix] = p_value
     
     # remove the datafile
     if delete_after:
-        os.remove(filename)
+        os.remove(BINARY_DATA_DIR + filename)
 
 def generate_batch_and_save(seed, n_dims, n_bytes, results_filename, delete_after = False):
     """
@@ -552,7 +584,7 @@ def generate_serial(num_seeds):
 
 # import scipy.stats as ss
 if __name__ == "__main__":
-    generate_parallel(100)
+    generate_parallel(1)
 #     seed = 2
 #     n_dims = 50
 #     N = 100000

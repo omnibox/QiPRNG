@@ -93,7 +93,7 @@ testlist = [
 
 print("Tests of Distinguishability from Random")
 
-def run_tests(filename, bigendian=False):
+def run_tests_python(filename, bigendian=False):
     bits = read_bits_from_file(filename,bigendian)    
     results = list()
     
