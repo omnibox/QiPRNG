@@ -584,7 +584,7 @@ def generate_serial(num_seeds):
 
 # import scipy.stats as ss
 if __name__ == "__main__":
-    generate_parallel(100)
+    generate_parallel(10000)
 #     seed = 2
 #     n_dims = 50
 #     N = 100000
