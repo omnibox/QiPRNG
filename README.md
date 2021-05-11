@@ -10,3 +10,5 @@ The directory structure must be initialized before any data is generated. To do 
 If using the [C implementations](https://csrc.nist.gov/Projects/Random-Bit-Generation/Documentation-and-Software) of the NIST SP 800-22 statistical suite, navigate to the ```src``` directory and compile the library with ```cc -fPIC -shared -o sp800.so ./sp800_22_tests_c/src/*```.
 
 Data generation can then be invoked with ```python DataProcessing.py```, or ```sbatch generate.sh``` if running on a cluster.
+
+Since GitHub has a file size limit of 100M, we split up the results file with ```split results.csv --bytes=50M results_chunks/chunk_``` and commit only the chunks. These can be put back together with ```cat results_chunks/chunk_* > results.csv```.
