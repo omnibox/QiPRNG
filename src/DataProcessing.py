@@ -27,6 +27,7 @@ import scipy as sp
 import scipy.sparse
 import scipy.sparse.linalg
 import scipy.stats
+import hashlib
 from QiPRNG import QiPRNG_exact, QiPRNG_diag, QiPRNG_tridiag, QiPRNG_dense
 
 DELETE_AFTER = True
@@ -69,7 +70,9 @@ def Lanczos(H, verbosity = 0):
     """
     state = np.random.get_state()
     # make the algorithm deterministic
-    np.random.seed(np.uint32(hash(str(H))))
+    h = hashlib.sha256(str(H).encode('utf-8'))
+    s = int.from_bytes(h.digest()[:8], "big")
+    np.random.seed(np.uint32(s))
     
     # select a random normalized starting vector
     v = np.random.random(H.shape[0]).astype(np.complex128) - 0.5
