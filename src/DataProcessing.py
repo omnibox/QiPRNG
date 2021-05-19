@@ -289,19 +289,23 @@ def construct_PRNG_tuple(seed, n_dims, verbosity = 0):
     
     # generating the eigenvalues in [0,1) for the diagonal system
     eigs = np.random.uniform(size = n_dims).astype(np.complex128)
+    print(eigs)
     
     # we need a measurement basis
     M = sp.stats.unitary_group.rvs(n_dims)
+    print(M)
     
     # generating corresponding dense and tridiagonal Hamiltonians
     X = sp.stats.unitary_group.rvs(n_dims)
     H_dense = X.dot(sp.sparse.diags([eigs], [0]).dot(X.conjugate().transpose()))
     M_dense = M.dot(X.conjugate().transpose())
     v0_dense = X.dot(v0)
+    print(H_dense)
     
     alpha, beta, X_tri = Householder(H_dense, 0)
     M_tridiag = M_dense.dot(X_tri.conjugate().transpose())
     v0_tridiag = X_tri.dot(v0_dense)
+    print(M_tridiag)
     
     # restore the previous state of numpy's PRNG
     np.random.set_state(state)
