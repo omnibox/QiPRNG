@@ -29,6 +29,7 @@ import scipy.sparse.linalg
 import scipy.stats
 from QiPRNG import QiPRNG_exact, QiPRNG_diag, QiPRNG_tridiag, QiPRNG_dense
 
+DELETE_AFTER = True
 N_DIMS = 10
 N_BYTES = 1000000
 RESULTS_FILENAME = "../data/results.csv"
@@ -228,7 +229,7 @@ def generate_datafile(filename, generator, num_bytes, verbosity = 0):
     with open(BINARY_DATA_DIR + filename, 'wb') as f:
         # announce that the file is open
         if verbosity >= 2:
-            print("generating %s..." % filename)
+            print("generating %s..." % filename, end="")
         
         # stream out the data
         for i in range(num_bytes):
@@ -241,7 +242,7 @@ def generate_datafile(filename, generator, num_bytes, verbosity = 0):
     
     # announce that generation is done after the file is closed
     if verbosity >= 1:
-        print("\rgenerating %s... 100% complete" % filename)
+        print("\rgenerating %s... 100%% complete" % filename)
 
 def construct_PRNG_tuple(seed, n_dims, verbosity = 0):
     """
@@ -510,7 +511,7 @@ def run_from_seed(seed):
     -------
     None.
     """
-    generate_batch_and_save(seed, N_DIMS, N_BYTES, RESULTS_FILENAME, True)
+    generate_batch_and_save(seed, N_DIMS, N_BYTES, RESULTS_FILENAME, DELETE_AFTER)
 
 def generate_parallel(num_seeds):
     """
@@ -564,7 +565,7 @@ def generate_serial(num_seeds):
     # go through num_seeds more and generate results for each
     seeds_to_run = np.arange(num_seeds) + max_seed + 1
     for seed in seeds_to_run:
-        generate_batch_and_save(seed, N_DIMS, N_BYTES, RESULTS_FILENAME, True)
+        generate_batch_and_save(seed, N_DIMS, N_BYTES, RESULTS_FILENAME, DELETE_AFTER)
 
 # TODO: plot results
 # def plot_results(results_filename):
@@ -580,7 +581,7 @@ def generate_serial(num_seeds):
 #     plt.show()
 
 
-
+import time
 
 # import scipy.stats as ss
 if __name__ == "__main__":

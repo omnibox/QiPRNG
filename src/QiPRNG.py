@@ -30,6 +30,7 @@ import scipy.sparse
 import scipy.sparse.linalg
 import struct
 import scipy.stats
+import hashlib
 
 def find_principal_eig(A):
     """
@@ -38,8 +39,8 @@ def find_principal_eig(A):
     This function is needed because ARPACK uses random initialization
     points before applying Krylov iterations, and that leads to
     nondeterministic behaviour (not a great thing for a PRNG). Here we
-    use a pseudorandom starting point by seeding numpy's PRNG with a hash
-    from the input matrix.
+    use a random orthonormal basis as pseudorandom starting points by
+    seeding numpy's PRNG with a hash from the input matrix.
 
     Parameters
     ----------
@@ -56,22 +57,32 @@ def find_principal_eig(A):
     """
     state = np.random.get_state()
     # make the solver deterministic
-    np.random.seed(np.uint32(hash(str(A))))
+    h = hashlib.sha256(str(A).encode('utf-8'))
+    s = int.from_bytes(h.digest()[:8], "big")
+    np.random.seed(np.uint32(s))
     
-    # select a random normalized starting vector
-    x = np.random.random(A.shape[0]).astype(np.complex128) - 0.5
-    x += np.random.random(A.shape[0]).astype(np.complex128) * (0+1j) - (0 + 0.5j)
-    x /= np.linalg.norm(x,2)
+    # select a random orthonormal set of starting vectors
+    xs = sp.stats.unitary_group.rvs(A.shape[0])
     
     # restore the previous state of numpy's PRNG
     np.random.set_state(state)
     
-    # solving by 100 steps of power iteration
-    for i in range(100):
-        x = A.dot(x)
-        x /= np.linalg.norm(x,2)
+    # solving by 100 steps of power iteration for each starting vector
+    for i in range(A.shape[0]):
+        for j in range(100):
+            xs[i] = A.dot(xs[i])
+            xs[i] /= np.linalg.norm(xs[i],2)
     
-    return np.conjugate(x).dot(A.dot(x)), x
+    # find the best approximation of the principal eigenvector
+    best_vec = xs[0]
+    best_val = np.conjugate(best_vec).dot(A.dot(best_vec))
+    for i in range(A.shape[0]):
+        val = np.conjugate(xs[i]).dot(A.dot(xs[i]))
+        if val > best_val:
+            best_vec = xs[i]
+            best_val = val
+    
+    return best_val, best_vec
 
 # Quantum-inspired PRNG supporting dense Hamiltonians
 def QiPRNG_dense(v0, H, M, verbosity = 0):
@@ -102,11 +113,6 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
     
     # building abs(H)
     A = abs(H)
-    
-    # POTENTIAL PROBLEM: scipy.sparse.linalg.eigsh exhibits nondeterministic
-    # behavior due to random starting points for iteration; the relevant code is
-    # buried somewhere in the fortran of ARPACK. Here we use a custom method
-    # instead. Lower accuracy and efficiency, but deterministic.
     
     # finding |abs(H)| and |d> for equation (4)
     A_norm, d = find_principal_eig(A)
@@ -139,13 +145,13 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
         print("Deviation from unitarity: ", dev)
     
     # constructing the initial state in the span{ |psi_j> } space
-    initial_state = T.dot(v0)
-    current_state = initial_state
+    current_state = T.dot(v0)
     
     # evolve the current state up to time N so we have
     # some nonzero amplitude on every state
     for _ in range(N):
         current_state = W.dot(current_state)
+        current_state /= np.linalg.norm(current_state, 2)
     
     # M is the basis we'll be measuring in
     # we push it to the { |psi_j> } space here
@@ -155,6 +161,7 @@ def QiPRNG_dense(v0, H, M, verbosity = 0):
     while True:
         # evolve to the next timestep
         current_state = W.dot(current_state)
+        current_state /= np.linalg.norm(current_state, 2)
         
         # find the amplitudes in our chosen basis
         amps = M.dot(current_state)
@@ -182,11 +189,6 @@ def QiPRNG_tridiag(v0, alpha, beta, M, verbosity = 0):
     abs_beta = list(map(abs, beta))
     A = sp.sparse.diags([abs_beta, abs_alpha, abs_beta], [-1,0,1], dtype=np.complex128)
     
-    # POTENTIAL PROBLEM: scipy.sparse.linalg.eigsh exhibits nondeterministic
-    # behavior due to random starting points for iteration; the relevant code is
-    # buried somewhere in the fortran of ARPACK. Here we use a custom method
-    # instead. Less accuracy and efficiency, but deterministic.
-    
     # finding |abs(H)| and |d> for equation (4)
     A_norm, d = find_principal_eig(A)
     
@@ -213,18 +215,18 @@ def QiPRNG_tridiag(v0, alpha, beta, M, verbosity = 0):
     
     if verbosity >= 1:
         # measuring how close to unitarity we are
-        dev = np.max(np.abs(W.dot(W.transpose().conjugate(True)).todense() - np.eye(25)))
+        dev = np.max(np.abs(W.dot(W.transpose().conjugate(True)).todense() - np.eye(W.shape[0])))
         print("Finished constructing walk operator")
         print("Deviation from unitarity: ", dev)
     
     # constructing the initial state in the span{ |psi_j> } space
-    initial_state = T.dot(v0)
-    current_state = initial_state
+    current_state = T.dot(v0)
     
     # evolve the current state up to time N so we have
     # some nonzero amplitude on every state
     for _ in range(N):
         current_state = W.dot(current_state)
+        current_state /= np.linalg.norm(current_state, 2)
     
     # M is the basis we'll be measuring in
     # we push it to the { |psi_j> } space here
@@ -234,6 +236,7 @@ def QiPRNG_tridiag(v0, alpha, beta, M, verbosity = 0):
     while True:
         # evolve to the next timestep
         current_state = W.dot(current_state)
+        current_state /= np.linalg.norm(current_state, 2)
         
         # find the amplitudes in our chosen basis
         amps = M.dot(current_state)
@@ -251,24 +254,21 @@ def QiPRNG_tridiag(v0, alpha, beta, M, verbosity = 0):
 
 # Quantum-inspired PRNG supporting diagonal Hamiltonians
 def QiPRNG_diag(v0, eigs, M, verbosity = 0):
-    # the dimension of the walk
-    N = len(eigs)
-    
     # the diagonal elements of the walk operator
     W = np.exp(np.array(eigs, dtype=np.complex128) * (0+1j))
     
-    # constructing the initial state in the span{ |psi_j> } space
-    initial_state = v0
-    current_state = initial_state
+    # the initial state
+    current_state = v0
     
     # the core loop: evolving the state and yielding the probabilities
     while True:
         # evolve to the next timestep
         current_state = W * current_state
+        current_state /= np.linalg.norm(current_state, 2)
         
         # find the amplitudes in the given basis
         amps = M.dot(current_state)
-        for j in range(N):
+        for j in range(len(v0)):
             # get the probabilities
             prob_j = np.real(amps[j])**2 + np.imag(amps[j])**2
             
@@ -281,10 +281,7 @@ def QiPRNG_diag(v0, eigs, M, verbosity = 0):
 
 # Quantum-inspired PRNG supporting diagonal Hamiltonians
 def QiPRNG_exact(v0, eigs, M, verbosity = 0):
-    # the dimension of the walk
-    N = len(eigs)
-    
-    # constructing the initial state in the span{ |psi_j> } space
+    # the initial state
     initial_state = v0
     T = 0
     
@@ -301,7 +298,7 @@ def QiPRNG_exact(v0, eigs, M, verbosity = 0):
         
         # find the amplitudes in the given basis
         amps = M.dot(current_state)
-        for j in range(N):
+        for j in range(len(v0)):
             # get the probabilities
             prob_j = np.real(amps[j])**2 + np.imag(amps[j])**2
             
