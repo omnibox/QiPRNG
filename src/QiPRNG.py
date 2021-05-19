@@ -55,6 +55,7 @@ def find_principal_eig(A):
         The eigenvector of A with eigenvalue lambda.
 
     """
+    print(A)
     state = np.random.get_state()
     # make the solver deterministic
     h = hashlib.sha256(str(A).encode('utf-8'))
@@ -183,6 +184,8 @@ def QiPRNG_tridiag(v0, alpha, beta, M, verbosity = 0):
     
     # the Hamiltonian
     H = sp.sparse.diags([np.conj(beta),alpha,beta], [-1,0,1], dtype=np.complex128).tocsr()
+    print(alpha)
+    print(M)
     
     # building abs(H)
     abs_alpha = list(map(abs, alpha))
